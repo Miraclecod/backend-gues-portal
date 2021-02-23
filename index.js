@@ -1,14 +1,17 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const bodyParser = require("body-parser");
 const cors = require('cors');
-const app = express();
-const port = 5000;
-const Schema = mongoose.Schema;
 
-const userScheme = new Schema({
-    name: String,
-    age: Number
-});
+const app = express();
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+const port = 5000;
+
+const tokenCreator = require('./utils/tokenCreator');
+const randomToken = require('./utils/randomToken');
+const schemas = require('./schema/schemas');
+const User = mongoose.model("User", schemas.userScheme);
 
 async function start() {
     try {
@@ -27,23 +30,48 @@ async function start() {
 
 start()
 
-const User = mongoose.model("User", userScheme);
-const user = new User({
-    name: "Bill",
-    age: 45
-});
-  
-user.save(function(err){
-    mongoose.disconnect();  // отключение от базы данных
-      
-    if(err) return console.log(err);
-    console.log("Сохранен объект", user);
-});
-
 app.use(cors());
 
 app.post('/login', (req, res) => {
-    console.log(req);
+    User.findOneAndUpdate(
+        { email: req.body.email, password: tokenCreator(req.body.password) },
+        { token: randomToken()},
+        { returnOriginal: false }, function(err, result) {
+        mongoose.disconnect();
+
+        if(err) return console.log(err);
+
+        res.json({name: result.name, token: result.token});
+    });
+});
+
+app.post('/registration', (req, res) => {
+    User.create({
+        name: req.body.name,
+        lastName: req.body.lastName,
+        gender: req.body.gender,
+        birthday: req.body.birthday,
+        email: req.body.email,
+        password: tokenCreator(req.body.password),
+        specialOffers: req.body.specialOffers
+    }, function(err) {
+        if(err) console.log(err);
+
+        return true;
+    });
+
     res.json('success');
 });
 
+app.post('/signOut', (req, res) => {
+    User.findOneAndUpdate(
+        { token: req.body.token },
+        { token: ''},
+        { returnOriginal: false }, function(err, result) {
+        mongoose.disconnect();
+
+        if(err) return console.log(err);
+
+        res.json(true);
+    });
+})
